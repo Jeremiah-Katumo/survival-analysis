@@ -1,0 +1,151 @@
+---
+title: "Weibull Model"
+author: "Jeremy"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+library(survival)
+library(survminer)
+library(TH.data)
+library(Ecdat)
+library(tidyverse)
+library(reshape2)
+```
+
+```{r setup, include=FALSE}
+# Compute Weibull model
+wb_mdl <- survreg(Surv(time, cens) ~ 1, data = GBSG2)
+wb_mdl
+```
+
+```{r}
+# Retrieve survival curve from model
+surv_curve <- seq(.99, .01, by = -.01)
+```
+
+```{r}
+# Get time for each probability
+time <- predict(wb_mdl, 
+             type = "quantile", 
+             p = 1-surv_curve, 
+             newdata = data.frame(1))
+```
+
+```{r}
+# Create data frame with the information needed for ggsurvplot_df
+surv_wb <- data.frame(time = time, surv = surv_curve, 
+                      upper = NA, lower = NA, std.err = NA
+                      )
+```
+
+```{r}
+# Plot
+ggsurvplot_df(fit = surv_wb, surv.geom = geom_line)
+```
+
+```{r}
+# Weibull model
+wbmodel <- survreg(Surv(time, cens) ~ horTh + tsize, data = GBSG2)
+coef(wbmodel)
+```
+
+```{r}
+# Imaginary patients
+newdata <- expand.grid(
+  horTh = levels(GBSG2$horTh),
+  tsize = quantile(GBSG2$tsize, 
+                   probs = c(0.25, 0.5, 0.75)
+                   )
+  )
+```
+
+```{r}
+# Compute survival curves
+survcurve <- seq(.99, .01, by = -.01)
+
+time <- predict(wbmodel, 
+             type = "quantile", 
+             p = 1-surv_curve,
+             newdata)
+```
+
+```{r}
+# Check the rows and columns of t
+dim(time)
+```
+
+```{r}
+# Use cbind() to combine the information in newdat with t
+surv_wbmodel_wide <- cbind(newdata, time)
+
+# Use melt() to bring the data.frame to long format
+surv_wbmodel <- melt(surv_wbmodel_wide, 
+                     id.vars = c("horTh", "tsize"), 
+                     variable.name = "surv_id", 
+                     value.name = "time"
+                     )
+
+# Use surv_wbmod$surv_id to add the correct survival probabilities surv
+surv_wbmodel$surv <- survcurve[as.numeric(surv_wbmod$surv_id)]
+
+# Add columns upper, lower, std.err, and strata to the data.frame
+surv_wbmodel[, c("upper", "lower", "std.err", "strata")] <- NA
+```
+
+```{r}
+# Plot the survival curves
+ggsurvplot_df(surv_wbmod, surv.geom = geom_line,
+              linetype = "horTh", color = "tsize", 
+              legend.title = NULL
+              )
+```
+
+```{r}
+# Weibull model
+wbmod <- survreg(Surv(time, cens) ~ horTh, data = GBSG2)
+
+# Log-Normal model
+lnmod <- survreg(Surv(time, cens) ~ horTh, data = GBSG2, dist = "lognormal")
+
+# Newdata
+newdat <- expand.grid(
+  horTh = levels(GBSG2$horTh),
+  tsize = quantile(GBSG2$tsize, probs = c(0.25, 0.5, 0.75))
+  )
+
+# Surv
+surv <- seq(.99, .01, by = -.01)
+t <- predict(wbmod, type = "quantile", p = 1-surv,
+             newdat)
+
+# Survival curve from Weibull model and log-normal model
+wbt <- predict(wbmod, type = "quantile", p = 1-surv, newdata = newdat)
+lnt <- predict(lnmod, type = "quantile", p = 1-surv, newdata = newdat)
+```
+
+```{r}
+# Use cbnd() to combine the information in newdat with t
+surv_wide <- cbind(newdat, t)
+
+# Melt the data.frame into long format.
+surv_long <- melt(surv_wide, 
+                  id.vars = c("horTh", "tsize"), 
+                  variable.name = "surv_id",
+                  value.name = "time")
+
+# Add column for the survival probabilities
+surv_long$surv <- surv[as.numeric(surv_long$surv_id)]
+
+# Add columns upper, lower, std.err, and strata contianing NA values
+surv_long[, c("upper", "lower", "std.err", "strata")] <- NA
+```
+
+```{r}
+# Plot the survival curves
+ggsurvplot_df(surv_long, surv.geom = geom_line, 
+              linetype = "horTh", color = "tsize", legend.title = NULL)
+```
+
+
