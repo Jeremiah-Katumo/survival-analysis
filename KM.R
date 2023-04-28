@@ -3,150 +3,131 @@ library(survminer)
 library(TH.data)
 library(Ecdat)
 library(tidyverse)
-library(reshape2)
-
-# Weibull model
-wb <- survreg(Surv(time, cens) ~ 1, data = GBSG2)
-
-# Compute the median survival from the model
-predict(wb, type = "quantile", p = 0.5, newdata = data.frame(1))
 
 
-# Weibull model
-wb <- survreg(Surv(time, cens) ~ 1, data = GBSG2)
+# Calculate total co2_emission per country: emissions_by_country
+emissions_by_country <- food_consumption %>%
+  group_by(country) %>%
+  summarize(total_emission = sum(co2_emission))
 
-# 70 Percent of patients survive beyond time point...
-predict(wb, type = "quantile", p = 0.3, newdata = data.frame(1))
+# Compute the first and third quartiles and IQR of total_emission
+q1 <- quantile(emissions_by_country$total_emission, 0.25)
+q3 <- quantile(emissions_by_country$total_emission, 0.75)
+iqr <- q3 - q1
+
+# Calculate the lower and upper cutoffs for outliers
+lower <- q1 - 1.5 * iqr
+upper <- q3 + 1.5 * iqr
+
+# Filter emissions_by_country to find outliers
+emissions_by_country %>%
+  filter(total_emission < lower | total_emission > upper)
+
+install.packages(c("TH.data", "Ecdat"))
+
+data(GBSG2, package = "TH.data")
+
+data(UnempDur, package = "Ecdat")
+
+help(UnempDur, package = "Ecdat")
+
+GBSG2
+
+data(UnempDur, package = "Ecdat")
+View(UnempDur)
+
+nums_cens <- table(UnempDur$censor1)
+nums_cens
+
+barplot(nums_cens)
+
+sobj <- survival::Surv(UnempDur$spell, UnempDur$censor1)
+sobj[1:10]
+
+# Create time and event data
+time <- c(5, 6, 2, 4, 4)
+event <- c(1, 0, 0, 1, 1)
+
+# Compute Kaplan-Meier estimate
+km <- survfit(Surv(time, event) ~ 1)
+km
+
+# Take a look at the structure
+str(km)
+
+# Create data.frame
+data.frame(time = km$time, n.risk = km$n.risk, n.event = km$n.event,
+           n.censor = km$n.censor, surv = km$surv)
+
+ggsurvplot(km, palette="blue", linetype=1, surv.median.line = "hv",
+           risk.table = TRUE, cumevents = TRUE, cumcensor = TRUE,
+           tables.height = 0.1)
+
+# Create dancedat data
+dancedat <- data.frame(
+  name = c("Chris", "Martin", "Conny", "Desi", "Reni", "Phil", 
+           "Flo", "Andrea", "Isaac", "Dayra", "Caspar"),
+  time = c(20, 2, 14, 22, 3, 7, 4, 15, 25, 17, 12),
+  obs_end = c(1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0))
+
+# Estimate the survivor function pretending that all censored observations are actual observations.
+km_wrong <- survfit(Surv(time) ~ 1, data = dancedat)
+
+# Estimate the survivor function from this dataset via kaplan-meier.
+km <- survfit(Surv(time, obs_end) ~ 1, data = dancedat)
+
+# Plot the two and compare
+ggsurvplot_combine(list(correct = km, wrong = km_wrong))
 
 
-# Weibull model
-wb <- survreg(Surv(time, cens) ~ 1, data = GBSG2)
 
-# Retrieve survival curve from model probabilities 
-surv <- seq(.99, .01, by = -.01)
+# Kaplan-Meier estimate
+km <- survfit(Surv(time, cens) ~ 1, data = GBSG2)
 
-# Get time for each probability
-t <- predict(wb, type = "quantile", p = 1-surv, newdata = data.frame(1))
+# Plot of the Kaplan-Meier estimate
+ggsurvplot(km, palette="blue", linetype = 1)
 
-# Create data frame with the information
-surv_wb <- data.frame(time = t, surv = surv)
+# Add the risk table to plot
+ggsurvplot(km, risk.table = TRUE)
 
-# Look at first few lines of the result
-head(surv_wb)
+# Add a line showing the median survival time
+ggsurvplot(km, risk.table = TRUE,surv.median.line = "hv")
 
 
 
-# Weibull model
-wb <- survreg(Surv(time, cens) ~ 1, data = GBSG2)
 
-# Retrieve survival curve from model
-surv <- seq(.99, .01, by = -.01)
 
-# Get time for each probability
-t <- predict(wb, type = "quantile", p = 1-surv, newdata = data.frame(1))
+# Compute Kaplan-Meier curve
+km <- survfit(Surv(time, status) ~ 1, data = lung)
 
-# Create data frame with the information needed for ggsurvplot_df
-surv_wb <- data.frame(time = t, surv = surv, 
-                      upper = NA, lower = NA, std.err = NA)
+# Compute Cox model
+cxmod <- coxph(Surv(time, status) ~ performance, data = lung)
+
+# Compute Cox model survival curves
+new_lung <- data.frame(performance = c(60, 70, 80, 90))
+cxsf <- survfit(cxmod, data = lung, newdata = new_lung, conf.type = "none")
+
+# Plot Kaplan-Meier curve
+ggsurvplot(km, conf.int = FALSE)
+
+# Plot Cox model survival curves
+ggsurvplot(cxsf, censor = FALSE)
+
+
+
+
+# Compute data.frame needed for plotting
+surv_cxmod0 <- surv_summary(cxsf)
+
+# Get a character vector of patient letters (patient IDs)
+pid <- as.character(surv_cxmod0$strata)
+
+# Multiple of the rows in newdat so that it fits with surv_cxmod0
+m_newdat <- newdat[pid, ]
+
+# Add patient info to data.frame
+surv_cxmod <- cbind(surv_cxmod0, m_newdat)
 
 # Plot
-ggsurvplot_df(fit = surv_wb, surv.geom = geom_line)
-
-
-# Look at the data set
-str(dat)
-
-# Estimate a Weibull model
-wbmod <- survreg(Surv(time, status) ~ sex, data = dat)
-coef(wbmod)
-
-
-
-# Weibull model
-wbmod <- survreg(Surv(time, cens) ~ horTh, data = GBSG2)
-coef(wbmod)
-
-# Retrieve survival curve from model
-surv <- seq(.99, .01, by = -.01)
-t_yes <- predict(wbmod, type = "quantile", p = 1-surv,
-                 newdata = data.frame(horTh = "yes"))
-
-# Take a look at survival curve
-str(t_yes)
-
-
-
-
-
-# Weibull model
-wbmod <- survreg(Surv(time, cens) ~ horTh + tsize, data = GBSG2)
-
-# Imaginary patients
-newdat <- expand.grid(
-  horTh = levels(GBSG2$horTh),
-  tsize = quantile(GBSG2$tsize, probs = c(0.25, 0.5, 0.75)))
-
-# Compute survival curves
-surv <- seq(.99, .01, by = -.01)
-t <- predict(wbmod, type = "quantile", p = 1-surv,
-             newdat)
-
-# How many rows and columns does t have?
-dim(t)
-
-
-
-
-# Use cbind() to combine the information in newdat with t
-surv_wbmod_wide <- cbind(newdat, t)
-
-# Use melt() to bring the data.frame to long format
-surv_wbmod <- melt(surv_wbmod_wide, 
-                   id.vars = c("horTh", "tsize"), 
-                   variable.name = "surv_id", 
-                   value.name = "time")
-
-# Use surv_wbmod$surv_id to add the correct survival probabilities surv
-surv_wbmod$surv <- surv[as.numeric(surv_wbmod$surv_id)]
-
-# Add columns upper, lower, std.err, and strata to the data.frame
-surv_wbmod[, c("upper", "lower", "std.err", "strata")] <- NA
-
-# Plot the survival curves
-ggsurvplot_df(surv_wbmod, surv.geom = geom_line,
-              linetype = "horTh", color = "tsize", legend.title = NULL)
-
-
-
-# Weibull model
-wbmod <- survreg(Surv(time, cens) ~ horTh, data = GBSG2)
-
-# Log-Normal model
-lnmod <- survreg(Surv(time, cens) ~ horTh, data = GBSG2, dist = "lognormal")
-
-# Newdata
-newdat <- data.frame(horTh = levels(GBSG2$horTh))
-
-# Surv
-surv <- seq(.99, .01, by = -.01)
-
-# Survival curve from Weibull model and log-normal model
-wbt <- predict(wbmod, type = "quantile", p = 1-surv, newdata = newdat)
-lnt <- predict(lnmod, type = "quantile", p = 1-surv, newdata = newdat)
-
-
-
-# Melt the data.frame into long format.
-surv_long <- melt(surv_wide, id.vars = c("horTh", "dist"), variable.name = "surv_id", value.name = "time")
-
-# Add column for the survival probabilities
-surv_long$surv <- surv[as.numeric(surv_long$surv_id)]
-
-# Add columns upper, lower, std.err, and strata contianing NA values
-surv_long[, c("upper", "lower", "std.err", "strata")] <- NA
-
-
-
-# Plot the survival curves
-ggsurvplot_df(surv_long, surv.geom = geom_line, 
-              linetype = "horTh", color = "dist", legend.title = NULL)
+ggsurvplot_df(surv_cxmod, linetype = "horTh", color = "tsize",
+              legend.title = NULL, censor = FALSE)
